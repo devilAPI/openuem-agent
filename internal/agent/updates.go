@@ -249,6 +249,12 @@ func (a *Agent) updatePackage(p openuem_nats.AvailableUpdate) openuem_nats.Updat
 		PackageScope:    p.Scope,
 	}
 
+	if !deploy.IsValidPackageID(p.PackageId) {
+		result.Failed = true
+		result.Info = "invalid package id"
+		return result
+	}
+
 	packageUpdateLock.Lock()
 	_, info, err := deploy.UpdatePackage(action)
 	packageUpdateLock.Unlock()

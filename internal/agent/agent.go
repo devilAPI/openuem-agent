@@ -462,16 +462,15 @@ func (a *Agent) UpdatePackageSubscribe() error {
 		_, stderr, err := deploy.UpdatePackage(action)
 		packageUpdateLock.Unlock()
 
-		if err != nil {
-			if errors.Is(err, deploy.ErrNoApplicableUpdate) {
-				log.Println("[INFO]: could not update package using package manager, no updates found", err)
-			} else {
-				log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
-				action.Failed = true
-				action.Info = stderr
-				if err := a.SendDeployResult(&action); err != nil {
-					log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
-				}
+		// A package that is already up to date is reported as successfully updated
+		if errors.Is(err, deploy.ErrNoApplicableUpdate) {
+			log.Println("[INFO]: could not update package using package manager, no updates found", err)
+		} else if err != nil {
+			log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
+			action.Failed = true
+			action.Info = stderr
+			if err := a.SendDeployResult(&action); err != nil {
+				log.Printf("[ERROR]: could not send deploy result to worker, reason: %v\n", err)
 			}
 			return
 		}
