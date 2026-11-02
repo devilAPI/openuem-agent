@@ -1,7 +1,9 @@
 package deploy
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/open-uem/nats"
@@ -40,7 +42,13 @@ func ParseBrewOutdated(output []byte) ([]nats.AvailableUpdate, error) {
 		Casks    []brewOutdatedPackage `json:"casks"`
 	}{}
 
-	if err := json.Unmarshal(output, &outdated); err != nil {
+	// Homebrew may print warnings around the JSON document
+	start, end := bytes.IndexByte(output, '{'), bytes.LastIndexByte(output, '}')
+	if start == -1 || end < start {
+		return nil, errors.New("brew outdated didn't return a JSON document")
+	}
+
+	if err := json.Unmarshal(output[start:end+1], &outdated); err != nil {
 		return nil, err
 	}
 

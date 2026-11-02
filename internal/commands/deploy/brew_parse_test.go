@@ -8,7 +8,8 @@ import (
 )
 
 func TestParseBrewOutdated(t *testing.T) {
-	output := `{
+	output := `Warning: some formulae are deprecated
+{
   "formulae": [
     {"name": "git", "installed_versions": ["2.46.0"], "current_version": "2.47.0", "pinned": false, "pinned_version": null},
     {"name": "node", "installed_versions": ["20.1.0"], "current_version": "22.0.0", "pinned": true, "pinned_version": "20.1.0"}
