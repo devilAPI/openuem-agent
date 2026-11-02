@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -44,6 +45,7 @@ type Agent struct {
 	SFTPServer             *sftp.SFTP
 	JetstreamContextCancel context.CancelFunc
 	WingetConfigureJob     gocron.Job
+	updates                *updateRunTracker
 }
 
 type JSONActions struct {
@@ -83,6 +85,8 @@ func New() Agent {
 	if err != nil {
 		log.Fatalf("[FATAL]: could not read sftp certificate")
 	}
+
+	agent.updates = newUpdateRunTracker()
 
 	return agent
 }
@@ -454,8 +458,12 @@ func (a *Agent) UpdatePackageSubscribe() error {
 			return
 		}
 
-		if _, stderr, err := deploy.UpdatePackage(action); err != nil {
-			if strings.Contains(err.Error(), strings.ToLower("0x8A15002B")) {
+		packageUpdateLock.Lock()
+		_, stderr, err := deploy.UpdatePackage(action)
+		packageUpdateLock.Unlock()
+
+		if err != nil {
+			if errors.Is(err, deploy.ErrNoApplicableUpdate) {
 				log.Println("[INFO]: could not update package using package manager, no updates found", err)
 			} else {
 				log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
@@ -659,6 +667,16 @@ func (a *Agent) SubscribeToNATSSubjects() {
 	}
 
 	err = a.UninstallPackageSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.ListPackageUpdatesSubscribe()
+	if err != nil {
+		log.Printf("[ERROR]: %v\n", err)
+	}
+
+	err = a.UpdatePackagesSubscribe()
 	if err != nil {
 		log.Printf("[ERROR]: %v\n", err)
 	}
