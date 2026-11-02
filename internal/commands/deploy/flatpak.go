@@ -13,7 +13,7 @@ import (
 	"github.com/open-uem/openuem-agent/internal/commands/runtime"
 )
 
-const flatpakListTimeout = 10 * time.Minute
+const flatpakListTimeout = 3 * time.Minute
 
 func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
 	log.Printf("[INFO]: received a request to install package %s", action.PackageId)

@@ -264,6 +264,10 @@ func (a *Agent) updatePackage(p openuem_nats.AvailableUpdate) openuem_nats.Updat
 	case errors.Is(err, deploy.ErrNoApplicableUpdate):
 		result.UpToDate = true
 		return result
+	case errors.Is(err, deploy.ErrPackageNotInstalled):
+		result.UpToDate = true
+		result.Info = err.Error()
+		return result
 	default:
 		result.Failed = true
 		result.Info = strings.TrimSpace(err.Error() + "\n" + info)

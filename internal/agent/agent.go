@@ -463,8 +463,8 @@ func (a *Agent) UpdatePackageSubscribe() error {
 		packageUpdateLock.Unlock()
 
 		// A package that is already up to date is reported as successfully updated
-		if errors.Is(err, deploy.ErrNoApplicableUpdate) {
-			log.Println("[INFO]: could not update package using package manager, no updates found", err)
+		if errors.Is(err, deploy.ErrNoApplicableUpdate) || errors.Is(err, deploy.ErrPackageNotInstalled) {
+			log.Printf("[INFO]: package %s was not updated, reason: %v", action.PackageId, err)
 		} else if err != nil {
 			log.Printf("[ERROR]: could not update package using package manager, reason: %v\n", err)
 			action.Failed = true

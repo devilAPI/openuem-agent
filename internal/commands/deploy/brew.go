@@ -139,7 +139,7 @@ func getBrewPath() string {
 	return brewPath
 }
 
-const brewListTimeout = 10 * time.Minute
+const brewListTimeout = 3 * time.Minute
 
 // ListAvailableUpdates returns the Homebrew formulae and casks with an available update.
 // Homebrew is run as the logged-in user, as it refuses to run as root.

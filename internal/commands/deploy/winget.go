@@ -107,6 +107,20 @@ func UpdatePackage(action nats.DeployAction) (string, string, error) {
 
 	log.Printf("[INFO]: winget.exe is upgrading the app %s\n", action.PackageId)
 	output, err := runWinGet(wingetUpgradeTimeout, wgPath, wingetUpgradeArgs(action.PackageId, nats.PackageScopeMachine)...)
+
+	// When no scope is requested, e.g. the package is updated on several computers from
+	// the console, the package may have been installed for the logged-in users instead
+	if errors.Is(err, errWinGetNoPackagesFound) {
+		if action.PackageScope == "" {
+			stdout, info, err := updateUserPackage(action.PackageId)
+			if errors.Is(err, errNoLoggedInUsers) || errors.Is(err, errUserWinGetNotFound) {
+				return output, "", ErrPackageNotInstalled
+			}
+			return stdout, info, err
+		}
+		return output, "", ErrPackageNotInstalled
+	}
+
 	if err != nil {
 		if !errors.Is(err, ErrNoApplicableUpdate) {
 			log.Printf("[ERROR]: winget.exe could not upgrade %s, reason: %v", action.PackageId, err)
