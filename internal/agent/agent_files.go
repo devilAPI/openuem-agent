@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -68,8 +69,8 @@ func (a *Agent) downloadAgentFile(rawURL string) (string, error) {
 	return downloadVerifiedFile(client, rawURL, a.Config.UUID, filepath.Join(dir, "downloads"))
 }
 
-// agentFilesClient is an HTTPS client that presents the agent certificate and only trusts
-// OpenUEM's CA
+// agentFilesClient is an HTTPS client that presents the agent certificate. It trusts
+// OpenUEM's CA and the system's CAs, as a reverse proxy may use a public certificate.
 func (a *Agent) agentFilesClient() (*http.Client, error) {
 	cert, err := tls.LoadX509KeyPair(a.Config.AgentCert, a.Config.AgentKey)
 	if err != nil {
@@ -80,7 +81,10 @@ func (a *Agent) agentFilesClient() (*http.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read the CA certificate, reason: %v", err)
 	}
-	pool := x509.NewCertPool()
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		pool = x509.NewCertPool()
+	}
 	pool.AddCert(caCert)
 
 	return &http.Client{
@@ -124,8 +128,9 @@ func downloadVerifiedFile(client *http.Client, rawURL, agentID, dir string) (str
 		return "", err
 	}
 
-	// The file name comes from the hash, so it's safe to use in a command line
-	path := filepath.Join(dir, hash+filepath.Ext(rawURL))
+	// The file name comes from the hash and a plain extension, so it's safe to use in a
+	// command line
+	localPath := filepath.Join(dir, hash+agentFileExtension(rawURL))
 	tmp, err := os.CreateTemp(dir, ".download-*")
 	if err != nil {
 		return "", err
@@ -145,8 +150,23 @@ func downloadVerifiedFile(client *http.Client, rawURL, agentID, dir string) (str
 		return "", fmt.Errorf("the downloaded file has the SHA-256 hash %s instead of %s", got, hash)
 	}
 
-	if err := os.Rename(tmp.Name(), path); err != nil {
+	if err := os.Rename(tmp.Name(), localPath); err != nil {
 		return "", err
 	}
-	return path, nil
+	return localPath, nil
+}
+
+var agentFileExtensionPattern = regexp.MustCompile(`^\.[A-Za-z0-9]{1,8}$`)
+
+// agentFileExtension returns the extension of the file in a URL, if it's a plain one
+func agentFileExtension(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	ext := path.Ext(u.Path)
+	if !agentFileExtensionPattern.MatchString(ext) {
+		return ""
+	}
+	return ext
 }

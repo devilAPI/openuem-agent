@@ -66,3 +66,11 @@ func TestDownloadVerifiedFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, entries, 1)
 }
+
+func TestAgentFileExtension(t *testing.T) {
+	hash := strings.Repeat("a", 64)
+	assert.Equal(t, ".msi", agentFileExtension("https://c:1324/agent-files/1/"+hash+"/app.msi"))
+	assert.Equal(t, ".msi", agentFileExtension("https://c:1324/agent-files/1/"+hash+"/app.msi?x=1#y"))
+	assert.Equal(t, "", agentFileExtension("https://c:1324/agent-files/1/"+hash+"/app.ms'i"))
+	assert.Equal(t, "", agentFileExtension("https://c:1324/agent-files/1/"+hash+"/app"))
+}
