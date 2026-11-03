@@ -786,6 +786,7 @@ func (a *Agent) CreateAgentJetStreamConsumer() {
 			"agent.certificate." + a.Config.UUID, "agent.enable." + a.Config.UUID,
 			"agent.disable." + a.Config.UUID, "agent.report." + a.Config.UUID,
 			"agent.update.updater." + a.Config.UUID, "agent.rollback.updater." + a.Config.UUID,
+			"agent.update.packages." + a.Config.UUID,
 		},
 	}
 
@@ -873,6 +874,10 @@ func (a *Agent) JetStreamAgentHandler(msg jetstream.Msg) {
 
 	if msg.Subject() == "agent.certificate."+a.Config.UUID {
 		a.AgentCertificateHandler(msg)
+	}
+
+	if msg.Subject() == "agent.update.packages."+a.Config.UUID {
+		a.QueuedUpdatePackagesHandler(msg)
 	}
 }
 

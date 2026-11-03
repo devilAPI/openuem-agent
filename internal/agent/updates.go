@@ -13,11 +13,20 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	openuem_nats "github.com/open-uem/nats"
 	"github.com/open-uem/openuem-agent/internal/commands/deploy"
 )
 
-const updateRunFilename = "last_update_run.json"
+const (
+	updateRunFilename = "last_update_run.json"
+
+	// Queued update requests older than this are ignored, e.g. for a computer that
+	// was switched off for months
+	queuedUpdateRequestMaxAge = 30 * 24 * time.Hour
+	// A queued request that arrives while a run is in progress is delivered again later
+	queuedUpdateRequestRetryDelay = 10 * time.Minute
+)
 
 // packageUpdateLock prevents running several package manager updates at the same time,
 // e.g. a single package update requested while a bulk update run is in progress
@@ -142,7 +151,14 @@ func (a *Agent) ListPackageUpdatesSubscribe() error {
 	_, err := a.NATSConnection.QueueSubscribe("agent.listpackageupdates."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
 		response := openuem_nats.AvailableUpdatesResponse{LastRun: a.updates.lastRun()}
 
-		if !response.LastRun.Running() {
+		request := openuem_nats.ListPackageUpdatesRequest{}
+		if len(msg.Data) > 0 {
+			if err := json.Unmarshal(msg.Data, &request); err != nil {
+				log.Printf("[ERROR]: could not unmarshal list package updates request, reason: %v", err)
+			}
+		}
+
+		if !request.StatusOnly && !response.LastRun.Running() {
 			updates, err := deploy.ListAvailableUpdates()
 			if err != nil {
 				log.Printf("[ERROR]: could not list available package updates, reason: %v", err)
@@ -192,6 +208,40 @@ func (a *Agent) UpdatePackagesSubscribe() error {
 		return fmt.Errorf("[ERROR]: could not subscribe to agent update packages, reason: %v", err)
 	}
 	return nil
+}
+
+// QueuedUpdatePackagesHandler starts an update run requested through JetStream, so computers
+// that were offline when the run was requested start it when they connect again
+func (a *Agent) QueuedUpdatePackagesHandler(msg jetstream.Msg) {
+	request := openuem_nats.UpdatePackagesRequest{}
+	if err := json.Unmarshal(msg.Data(), &request); err != nil {
+		log.Printf("[ERROR]: could not unmarshal queued update packages request, reason: %v", err)
+		ackQueuedMessage(msg)
+		return
+	}
+
+	if !request.RequestedAt.IsZero() && time.Since(request.RequestedAt) > queuedUpdateRequestMaxAge {
+		log.Printf("[INFO]: ignoring the update run requested on %s, it's too old", request.RequestedAt.Format(time.RFC3339))
+		ackQueuedMessage(msg)
+		return
+	}
+
+	if !a.updates.start(len(request.Packages)) {
+		log.Println("[INFO]: an update run is already in progress, the queued update run will be retried later")
+		if err := msg.NakWithDelay(queuedUpdateRequestRetryDelay); err != nil {
+			log.Printf("[ERROR]: could not NAK message, reason: %v", err)
+		}
+		return
+	}
+
+	ackQueuedMessage(msg)
+	go a.runPackageUpdates(request.Packages)
+}
+
+func ackQueuedMessage(msg jetstream.Msg) {
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+	}
 }
 
 func respondUpdatePackages(msg *nats.Msg, reason string) {
